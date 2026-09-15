@@ -1,0 +1,8 @@
+pandas
+numpy
+openpyxl
+matplotlib
+scikit-learn
+streamlit
+joblib
+seaborn
