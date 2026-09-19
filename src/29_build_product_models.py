@@ -2,25 +2,14 @@ import pandas as pd
 import numpy as np
 import joblib
 import os
-
 from sklearn.ensemble import RandomForestRegressor
 
-
-# ============================================================
-# CONFIGURATION
-# ============================================================
-
+# Set the file paths
 INPUT_FILE = "data/processed/retail_cleaned.csv"
-
 MODEL_FOLDER = "models"
-
 DATA_FOLDER = "data/processed"
 
-
-# ============================================================
-# PRODUCTS TO SUPPORT
-# ============================================================
-
+# Products to train the models for
 PRODUCTS = {
     "21212": "PACK OF 72 RETRO SPOT CAKE CASES",
     "85123A": "WHITE HANGING HEART T-LIGHT HOLDER",
@@ -29,33 +18,18 @@ PRODUCTS = {
     "17003": "BROCADE RING PURSE"
 }
 
-
-# ============================================================
-# CREATE FOLDERS
-# ============================================================
-
+# Create the required folders
 os.makedirs(MODEL_FOLDER, exist_ok=True)
-
 os.makedirs(DATA_FOLDER, exist_ok=True)
 
-
-# ============================================================
-# LOAD DATA
-# ============================================================
-
+# Load the data
 df = pd.read_csv(INPUT_FILE)
-
 df["InvoiceDate"] = pd.to_datetime(
     df["InvoiceDate"]
 )
-
 df["StockCode"] = df["StockCode"].astype(str)
 
-
-# ============================================================
-# FEATURES
-# ============================================================
-
+# Define the features
 features = [
     "DayOfWeek",
     "DayOfMonth",
@@ -72,42 +46,24 @@ features = [
     "Rolling_Mean_28"
 ]
 
-
-# ============================================================
-# TRAIN EACH PRODUCT
-# ============================================================
-
+# Train a model for each product
 print("=" * 70)
 print("BUILDING MULTI-PRODUCT FORECASTING MODELS")
 print("=" * 70)
 
-
 for product_code, description in PRODUCTS.items():
-
     print("\n" + "-" * 70)
-
     print(
         f"Product: {product_code} - {description}"
     )
-
-    # --------------------------------------------------------
-    # Select product
-    # --------------------------------------------------------
-
+    # Select the product
     product_df = df[
         df["StockCode"] == product_code
     ].copy()
-
     if product_df.empty:
-
         print("Product not found. Skipping.")
-
         continue
-
-    # --------------------------------------------------------
-    # Aggregate daily demand
-    # --------------------------------------------------------
-
+    # Calculate daily demand
     daily = (
         product_df
         .groupby(
@@ -115,116 +71,78 @@ for product_code, description in PRODUCTS.items():
         )["Quantity"]
         .sum()
     )
-
-    # --------------------------------------------------------
-    # Complete calendar
-    # --------------------------------------------------------
-
+    # Create a complete date range
     full_dates = pd.date_range(
         start=df["InvoiceDate"].min().normalize(),
         end=df["InvoiceDate"].max().normalize(),
         freq="D"
     )
-
     daily = daily.reindex(
         full_dates,
         fill_value=0
     )
-
     product_ts = pd.DataFrame({
         "Date": daily.index,
         "Demand": daily.values
     })
-
-    # --------------------------------------------------------
-    # Calendar features
-    # --------------------------------------------------------
-
+    # Create calendar features
     product_ts["DayOfWeek"] = (
         product_ts["Date"].dt.dayofweek
     )
-
     product_ts["DayOfMonth"] = (
         product_ts["Date"].dt.day
     )
-
     product_ts["Month"] = (
         product_ts["Date"].dt.month
     )
-
     product_ts["Quarter"] = (
         product_ts["Date"].dt.quarter
     )
-
     product_ts["WeekOfYear"] = (
         product_ts["Date"].dt.isocalendar().week
     ).astype(int)
-
     product_ts["IsWeekend"] = (
         product_ts["DayOfWeek"] >= 5
     ).astype(int)
-
-    # --------------------------------------------------------
-    # Lag features
-    # --------------------------------------------------------
-
+    # Create lag features
     product_ts["Lag_1"] = (
         product_ts["Demand"].shift(1)
     )
-
     product_ts["Lag_7"] = (
         product_ts["Demand"].shift(7)
     )
-
     product_ts["Lag_14"] = (
         product_ts["Demand"].shift(14)
     )
-
     product_ts["Lag_28"] = (
         product_ts["Demand"].shift(28)
     )
-
-    # --------------------------------------------------------
-    # Rolling means
-    # --------------------------------------------------------
-
+    # Create rolling average features
     product_ts["Rolling_Mean_7"] = (
         product_ts["Demand"]
         .shift(1)
         .rolling(7)
         .mean()
     )
-
     product_ts["Rolling_Mean_14"] = (
         product_ts["Demand"]
         .shift(1)
         .rolling(14)
         .mean()
     )
-
     product_ts["Rolling_Mean_28"] = (
         product_ts["Demand"]
         .shift(1)
         .rolling(28)
         .mean()
     )
-
-    # --------------------------------------------------------
     # Remove rows without enough history
-    # --------------------------------------------------------
-
     product_ts = product_ts.dropna().reset_index(
         drop=True
     )
-
-    # --------------------------------------------------------
-    # Train model
-    # --------------------------------------------------------
-
+    # Train the model
     X = product_ts[features]
-
     y = product_ts["Demand"]
-
     model = RandomForestRegressor(
         n_estimators=300,
         max_depth=10,
@@ -232,56 +150,36 @@ for product_code, description in PRODUCTS.items():
         random_state=42,
         n_jobs=-1
     )
-
     model.fit(X, y)
-
-    # --------------------------------------------------------
-    # Save model
-    # --------------------------------------------------------
-
+    # Save the model
     model_file = (
         f"{MODEL_FOLDER}/"
         f"random_forest_product_{product_code}.joblib"
     )
-
     joblib.dump(
         model,
         model_file
     )
-
-    # --------------------------------------------------------
-    # Save product time series
-    # --------------------------------------------------------
-
+    # Save the product feature data
     data_file = (
         f"{DATA_FOLDER}/"
         f"product_{product_code}_features.csv"
     )
-
     product_ts.to_csv(
         data_file,
         index=False
     )
-
-    # --------------------------------------------------------
-    # Display information
-    # --------------------------------------------------------
-
+    # Display the saved files and training details
     print(
         f"Model saved: {model_file}"
     )
-
     print(
         f"Feature data saved: {data_file}"
     )
-
     print(
         f"Training rows: {len(product_ts)}"
     )
 
-
 print("\n" + "=" * 70)
-
 print("MULTI-PRODUCT MODEL BUILDING COMPLETED")
-
 print("=" * 70)

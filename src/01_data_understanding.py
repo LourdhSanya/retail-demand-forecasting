@@ -1,6 +1,5 @@
 import pandas as pd
 
-# Path to the raw dataset
 file_path = "data/raw/online_retail_II.xlsx"
 
 # Load Excel file
